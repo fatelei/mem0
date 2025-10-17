@@ -1,0 +1,315 @@
+---
+title: PydanticAI Integration
+description: How to use PydanticAI with mem0 for memory management
+---
+
+# PydanticAI Integration
+
+[PydanticAI](https://ai.pydantic.dev/) is a Python agent framework built by the Pydantic team that provides type-safe, production-grade applications with Generative AI. This integration allows you to use PydanticAI as the LLM provider for mem0.
+
+## Installation
+
+To use PydanticAI with mem0, you need to install both packages:
+
+```bash
+pip install mem0ai pydantic-ai
+```
+
+## Quick Start
+
+### Basic Usage
+
+```python
+from mem0 import Memory
+from mem0.llms.pydanticai import PydanticAILLM, PydanticAIConfig
+
+# Configure PydanticAI
+config = PydanticAIConfig(
+    model="openai:gpt-4o-mini",  # Supports all PydanticAI model strings
+    temperature=0.1,
+    max_tokens=1000
+)
+
+# Initialize PydanticAI LLM
+llm = PydanticAILLM(config)
+
+# Initialize mem0 Memory with PydanticAI
+memory = Memory(
+    llm_config={
+        "provider": "pydanticai",
+        "config": {
+            "model": "openai:gpt-4o-mini",
+            "temperature": 0.1
+        }
+    }
+)
+
+# Add memories
+result = memory.add(
+    messages="I love hiking in the mountains.",
+    user_id="user123"
+)
+print(f"Memory added: {result}")
+```
+
+### Using with Different Model Providers
+
+PydanticAI supports multiple model providers. Here are some examples:
+
+```python
+# OpenAI
+config = PydanticAIConfig(model="openai:gpt-4o")
+
+# Anthropic
+config = PydanticAIConfig(model="anthropic:claude-3-5-sonnet")
+
+# Google Gemini
+config = PydanticAIConfig(model="gemini:gemini-1.5-flash")
+
+# Groq
+config = PydanticAIConfig(model="groq:llama-3.1-70b-versatile")
+
+# OpenRouter
+config = PydanticAIConfig(model="openrouter:anthropic/claude-3.5-sonnet")
+```
+
+## Advanced Usage
+
+### Custom Agent Configuration
+
+You can create a custom PydanticAI agent with specific instructions and output types:
+
+```python
+from pydantic import BaseModel, Field
+from pydantic_ai import Agent
+from mem0.llms.pydanticai import PydanticAIConfig, PydanticAILLM
+
+# Define structured output type
+class MemoryAnalysis(BaseModel):
+    """Structured analysis of user memories."""
+    themes: list[str] = Field(description="Main themes in memories")
+    sentiment: str = Field(description="Overall sentiment")
+    insights: str = Field(description="Key insights")
+
+# Create custom agent
+agent = Agent(
+    "openai:gpt-4o-mini",
+    output_type=MemoryAnalysis,
+    instructions="Analyze user memories and provide structured insights."
+)
+
+# Use with mem0
+config = PydanticAIConfig(
+    agent_model=agent,  # Use pre-configured agent
+    agent_output_type=MemoryAnalysis
+)
+
+llm = PydanticAILLM(config)
+memory = Memory(llm_provider=llm)
+
+# Use the memory as usual
+result = memory.add("I'm excited about my new job!", user_id="user123")
+```
+
+### Dependency Injection
+
+PydanticAI supports dependency injection for more complex scenarios:
+
+```python
+from dataclasses import dataclass
+from pydantic_ai import Agent, RunContext
+
+@dataclass
+class MemoryDeps:
+    user_context: dict
+    preferences: dict
+
+def create_memory_agent():
+    agent = Agent(
+        "openai:gpt-4o-mini",
+        deps_type=MemoryDeps,
+        instructions="You are a memory assistant with access to user context."
+    )
+    
+    @agent.tool
+    async def get_user_preferences(ctx: RunContext[MemoryDeps]) -> dict:
+        """Get user preferences."""
+        return ctx.deps.preferences
+    
+    return agent
+
+# Use with mem0
+agent = create_memory_agent()
+deps = MemoryDeps(
+    user_context={"name": "Alice", "age": 30},
+    preferences={"language": "English", "tone": "friendly"}
+)
+
+config = PydanticAIConfig(
+    agent_model=agent,
+    agent_deps_type=MemoryDeps
+)
+
+llm = PydanticAILLM(config)
+memory = Memory(llm_provider=llm)
+
+# Generate response with dependencies
+response = llm.generate_response(
+    [{"role": "user", "content": "Summarize my recent memories"}],
+    deps=deps
+)
+```
+
+## Configuration Options
+
+### PydanticAIConfig Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `model` | `str` | `None` | PydanticAI model string (e.g., "openai:gpt-4o") |
+| `temperature` | `float` | `0.1` | Controls randomness of output |
+| `max_tokens` | `int` | `2000` | Maximum tokens to generate |
+| `agent_model` | `Agent` | `None` | Pre-configured PydanticAI Agent instance |
+| `agent_deps_type` | `type` | `None` | Dependencies type for the agent |
+| `agent_output_type` | `type` | `None` | Output type for structured responses |
+| `agent_instructions` | `str` | `None` | Instructions for the agent |
+
+### Using with mem0 Memory
+
+```python
+from mem0 import Memory
+
+# Method 1: Direct configuration
+memory = Memory(
+    llm_config={
+        "provider": "pydanticai",
+        "config": {
+            "model": "openai:gpt-4o-mini",
+            "temperature": 0.1,
+            "max_tokens": 1000
+        }
+    }
+)
+
+# Method 2: Using PydanticAI LLM instance
+from mem0.llms.pydanticai import PydanticAILLM, PydanticAIConfig
+
+config = PydanticAIConfig(model="openai:gpt-4o-mini")
+llm = PydanticAILLM(config)
+memory = Memory(llm_provider=llm)
+```
+
+## Examples
+
+### Memory Management Example
+
+```python
+from mem0 import Memory
+from mem0.llms.pydanticai import PydanticAIConfig
+
+# Setup
+memory = Memory(
+    llm_config={
+        "provider": "pydanticai",
+        "config": {
+            "model": "openai:gpt-4o-mini",
+            "agent_instructions": "You are a helpful memory assistant."
+        }
+    }
+)
+
+user_id = "user123"
+
+# Add memories
+memories = [
+    "I love Italian food, especially pasta and pizza.",
+    "I'm learning to play the guitar.",
+    "I prefer working in the morning."
+]
+
+for mem in memories:
+    result = memory.add(mem, user_id=user_id)
+    print(f"Added: {result}")
+
+# Search memories
+results = memory.search("What are my hobbies?", user_id=user_id)
+print(f"Search results: {results}")
+
+# Get all memories
+all_memories = memory.get_all(user_id=user_id)
+print(f"All memories: {all_memories}")
+```
+
+### Structured Memory Analysis
+
+```python
+from pydantic import BaseModel, Field
+from mem0.llms.pydanticai import PydanticAIConfig
+
+class MemoryProfile(BaseModel):
+    """User memory profile."""
+    interests: list[str] = Field(description="User's interests")
+    skills: list[str] = Field(description="User's skills")
+    preferences: dict = Field(description="User's preferences")
+
+# Configure with structured output
+config = PydanticAIConfig(
+    model="openai:gpt-4o-mini",
+    agent_output_type=MemoryProfile,
+    agent_instructions="Analyze user memories to create a profile."
+)
+
+memory = Memory(
+    llm_config={
+        "provider": "pydanticai",
+        "config": config.__dict__
+    }
+)
+
+# Add memories about the user
+memory.add("I enjoy coding in Python and JavaScript", user_id="user1")
+memory.add("I like hiking and photography", user_id="user1")
+memory.add("I prefer working remotely", user_id="user1")
+
+# The agent will automatically structure the analysis
+```
+
+## Benefits of Using PydanticAI
+
+1. **Type Safety**: Full type annotations and validation
+2. **Structured Output**: Built-in support for Pydantic models
+3. **Model Agnostic**: Support for multiple LLM providers
+4. **Dependency Injection**: Clean dependency management
+5. **Tool Support**: Built-in tool calling capabilities
+6. **Observability**: Integration with Pydantic Logfire
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Import Error**: Make sure `pydantic-ai` is installed
+   ```bash
+   pip install pydantic-ai
+   ```
+
+2. **API Key Issues**: Set the appropriate environment variables for your model provider
+   ```bash
+   export OPENAI_API_KEY="your-key"
+   export ANTHROPIC_API_KEY="your-key"
+   ```
+
+3. **Model Not Found**: Ensure you're using the correct model string format
+   ```python
+   # Correct format
+   model="openai:gpt-4o-mini"
+   model="anthropic:claude-3-5-sonnet"
+   
+   # Incorrect format
+   model="gpt-4o-mini"  # Missing provider prefix
+   ```
+
+## Next Steps
+
+- Explore [PydanticAI documentation](https://ai.pydantic.dev/) for advanced features
+- Check out [mem0 examples](../../examples/) for more integration patterns
+- Learn about [memory operations](../../core-concepts/memory-operations/) in mem0
